@@ -256,3 +256,13 @@ def debug_routes():
 if __name__ == "__main__":
     import uvicorn
     uvicorn.run(app, host="127.0.0.1", port=8000, reload=True)
+
+
+
+# --- Root redirect to docs --- 
+from fastapi.responses import RedirectResponse
+
+@app.get("/", include_in_schema=False)
+def root():
+    # option A : rediriger vers la doc
+    return RedirectResponse(url="/docs")
