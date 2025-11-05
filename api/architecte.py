@@ -333,3 +333,9 @@ def root():
 if __name__ == "__main__":
     import uvicorn
     uvicorn.run(app, host="127.0.0.1", port=8000, reload=True)
+
+
+@app.get("/architecte/logtest")
+def log_test(_: None = Depends(require_token)):
+    _create_log_entry("Test de log manuel depuis /logtest", "INFO", {"test": True})
+    return {"status": "sent"}
