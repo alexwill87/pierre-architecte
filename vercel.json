@@ -1,11 +1,9 @@
 {
   "version": 2,
-  "functions": {
-    "api/**/*.py": {
-      "runtime": "vercel-python@3.11"
-    }
-  },
+  "builds": [
+    { "src": "api/architecte.py", "use": "@vercel/python" }
+  ],
   "routes": [
-    { "src": "/(.*)", "dest": "/api/architecte.py" }
+    { "src": "/(.*)", "dest": "api/architecte.py" }
   ]
 }
