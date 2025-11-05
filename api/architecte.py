@@ -4,7 +4,8 @@ from pathlib import Path
 from typing import Literal, Optional, Dict, Any, List
 
 import requests
-from fastapi import FastAPI, Query, HTTPException
+from fastapi import FastAPI, Query, HTTPException, Depends, Header
+from fastapi.responses import RedirectResponse
 from notion_client import Client
 from dotenv import load_dotenv, find_dotenv
 
@@ -22,13 +23,20 @@ logger.info("dotenv path=%s exists=%s loaded=%s", env_path, env_path.exists(), b
 # --- Application ---
 app = FastAPI(title="Architecte API")
 
-# --- Environment & Notion client ---
+# --- Env & security ---
+API_TOKEN = os.getenv("API_TOKEN")  # récupéré depuis l'env (Vercel, .env, etc.)
+
+def require_token(x_token: str = Header(None)):
+    # Si API_TOKEN est défini côté serveur, on l'exige :
+    if API_TOKEN and x_token != API_TOKEN:
+        raise HTTPException(status_code=401, detail="Unauthorized")
+
+# --- Notion client & DBs ---
 NOTION_TOKEN = os.getenv("NOTION_TOKEN")
 if not NOTION_TOKEN:
     logger.warning("NOTION_TOKEN not found in environment; Notion calls will fail")
 notion = Client(auth=NOTION_TOKEN) if NOTION_TOKEN else None
 
-# Database IDs (must be read after load_dotenv)
 DBS: Dict[str, Optional[str]] = {
     "fwk":   os.getenv("FWK_DB_ID"),
     "agent": os.getenv("AGENT_DB_ID"),
@@ -44,7 +52,6 @@ DBS: Dict[str, Optional[str]] = {
 
 NOTION_API_VERSION = os.getenv("NOTION_VERSION", "2022-06-28")
 
-
 # --- Helpers ---
 def _mask(val: Optional[str]) -> Optional[str]:
     if not val:
@@ -52,10 +59,8 @@ def _mask(val: Optional[str]) -> Optional[str]:
     s = str(val)
     return (s[:4] + "..." + s[-4:]) if len(s) > 8 else s
 
-
 def _env_status(keys: List[str]) -> Dict[str, Dict[str, Any]]:
     return {k: {"present": bool(os.getenv(k)), "masked": _mask(os.getenv(k))} for k in keys}
-
 
 def _ensure_db(db_key: str) -> str:
     dbid = DBS.get(db_key)
@@ -64,13 +69,11 @@ def _ensure_db(db_key: str) -> str:
         raise HTTPException(status_code=400, detail=f"Base inconnue ou non configurée : {db_key}")
     return dbid
 
-
 def _first_title_prop(properties: dict) -> Optional[str]:
     for name, p in properties.items():
         if p.get("type") == "title":
             return name
     return None
-
 
 def _query_database(database_id: str, page_size: int = 10) -> Dict[str, Any]:
     """
@@ -111,7 +114,6 @@ def _query_database(database_id: str, page_size: int = 10) -> Dict[str, Any]:
         logger.exception("Notion REST query failed: status=%s body=%s", getattr(resp, "status_code", None), getattr(resp, "text", None))
         raise RuntimeError(f"Notion REST query failed: {e}")
     return resp.json()
-
 
 def _create_log_entry(message: str, level: str = "INFO", extra: Optional[Dict[str, Any]] = None) -> Optional[dict]:
     """
@@ -154,16 +156,13 @@ def _create_log_entry(message: str, level: str = "INFO", extra: Optional[Dict[st
         logger.exception("Failed to write log to Notion: %s", e)
         return None
 
-
 # --- Types ---
 AllowedDB = Literal["fwk", "agent", "module", "vars", "validations", "outputs", "inputs", "tests", "logs", "kpis"]
-
 
 # --- Endpoints ---
 @app.get("/healthcheck")
 def healthcheck():
     return {"status": "ok"}
-
 
 @app.get("/architecte/analyse")
 def analyse_base(db: AllowedDB = Query("fwk", description="Nom court de la base")):
@@ -194,7 +193,6 @@ def analyse_base(db: AllowedDB = Query("fwk", description="Nom court de la base"
     except Exception as e:
         logger.exception("Error analysing DB %s: %s", db, e)
         return {"status": "error", "message": str(e)}
-
 
 @app.get("/architecte/rows")
 def get_rows(db: AllowedDB = Query("fwk"), limit: int = Query(3, ge=1, le=100)):
@@ -238,31 +236,23 @@ def get_rows(db: AllowedDB = Query("fwk"), limit: int = Query(3, ge=1, le=100)):
         logger.exception("Error fetching rows for %s: %s", db, e)
         return {"status": "error", "message": str(e)}
 
-
 # --- Debug endpoints (remove or secure in prod) ---
 @app.get("/debug/env_status")
 def debug_env_status():
     keys = ["NOTION_TOKEN", "FWK_DB_ID", "AGENT_DB_ID", "MODULE_DB_ID", "VARS_DB_ID", "LOGS_DB_ID"]
     return {"dotenv_path": str(env_path), "loaded": bool(_loaded), "env": _env_status(keys)}
 
-
 @app.get("/debug/routes")
 def debug_routes():
     routes = [{"path": r.path, "name": r.name, "methods": list(getattr(r, "methods", []))} for r in app.routes]
     return {"routes": routes}
 
+# --- Root redirect to docs ---
+@app.get("/", include_in_schema=False)
+def root():
+    return RedirectResponse(url="/docs")
 
 # --- Local runner ---
 if __name__ == "__main__":
     import uvicorn
     uvicorn.run(app, host="127.0.0.1", port=8000, reload=True)
-
-
-
-# --- Root redirect to docs --- 
-from fastapi.responses import RedirectResponse
-
-@app.get("/", include_in_schema=False)
-def root():
-    # option A : rediriger vers la doc
-    return RedirectResponse(url="/docs")
