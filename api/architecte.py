@@ -23,6 +23,18 @@ logger.info("dotenv path=%s exists=%s loaded=%s", env_path, env_path.exists(), b
 # --- Application ---
 app = FastAPI(title="Architecte API")
 
+from fastapi.middleware.cors import CORSMiddleware
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=[
+        "https://pierre-architecte.vercel.app",  # ton front déployé
+        "http://localhost:3000",                 # pour le front local (React, Next.js, etc.)
+    ],
+    allow_methods=["GET", "POST"],
+    allow_headers=["*"],
+)
+
 # --- Env & security ---
 API_TOKEN = os.getenv("API_TOKEN")  # récupéré depuis l'env (Vercel, .env, etc.)
 
