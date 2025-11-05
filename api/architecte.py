@@ -81,6 +81,32 @@ def _ensure_db(db_key: str) -> str:
         raise HTTPException(status_code=400, detail=f"Base inconnue ou non configurée : {db_key}")
     return dbid
 
+
+def _schema_of(database_id: str) -> Dict[str, str]:
+    """
+    Retourne {nom_propriété: type} pour une base Notion donnée.
+    Utilise le SDK si dispo, sinon fallback REST.
+    """
+    # SDK
+    if notion:
+        meta = notion.databases.retrieve(database_id=database_id)
+    else:
+        token = NOTION_TOKEN or os.getenv("NOTION_TOKEN")
+        if not token:
+            raise RuntimeError("NOTION_TOKEN manquant pour lire le schéma Notion")
+        url = f"https://api.notion.com/v1/databases/{database_id}"
+        headers = {
+            "Authorization": f"Bearer {token}",
+            "Notion-Version": NOTION_API_VERSION,
+        }
+        resp = requests.get(url, headers=headers, timeout=15)
+        resp.raise_for_status()
+        meta = resp.json()
+
+    props = meta.get("properties", {}) if isinstance(meta, dict) else {}
+    return {name: p.get("type", "unknown") for name, p in props.items()}
+
+
 def _first_title_prop(properties: dict) -> Optional[str]:
     for name, p in properties.items():
         if p.get("type") == "title":
@@ -247,6 +273,45 @@ def get_rows(db: AllowedDB = Query("fwk"), limit: int = Query(3, ge=1, le=100)):
     except Exception as e:
         logger.exception("Error fetching rows for %s: %s", db, e)
         return {"status": "error", "message": str(e)}
+
+
+from fastapi import Depends  # (si pas déjà importé)
+
+@app.get("/architecte/compare")
+def compare(
+    db: AllowedDB = Query("fwk", description="Base courante"),
+    ref: str = Query("FWK_DB_ID_REF", description="Nom de la variable d'env de la base de référence"),
+    _: None = Depends(require_token)
+):
+    curr_id = _ensure_db(db)
+    ref_id = os.getenv(ref)
+    if not ref_id:
+        raise HTTPException(status_code=400, detail=f"Référence absente (env var '{ref}')")
+
+    curr = _schema_of(curr_id)
+    target = _schema_of(ref_id)
+
+    missing = [k for k in target if k not in curr]
+    extra = [k for k in curr if k not in target]
+    type_mismatch = [k for k in target if k in curr and target[k] != curr[k]]
+
+    try:
+        _create_log_entry(
+            f"Compare {db} → {ref}", "INFO",
+            {"missing": missing[:5], "extra": extra[:5], "types": type_mismatch[:5]}
+        )
+    except Exception:
+        pass
+
+    return {
+        "status": "ok",
+        "base": db,
+        "ref_env": ref,
+        "missing": missing,
+        "extra": extra,
+        "type_mismatch": type_mismatch,
+    }
+
 
 # --- Debug endpoints (remove or secure in prod) ---
 @app.get("/debug/env_status")
