@@ -243,10 +243,7 @@ def healthcheck():
     return {"status": "ok"}
 
 @app.get("/architecte/analyse")
-def analyse_base(
-    db: AllowedDB = Query("fwk", description="Nom court de la base"),
-    _: None = Depends(require_token)
-):
+def analyse_base(db: AllowedDB = Query("fwk", description="Nom court de la base")):
     try:
         database_id = _ensure_db(db)
         logger.info("Retrieving schema for DB %s id=%s", db, _mask(database_id))
