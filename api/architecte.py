@@ -358,6 +358,22 @@ def edit_entry(
         logger.exception("Erreur création entrée Notion : %s", e)
         raise HTTPException(status_code=500, detail=str(e))
 
+@app.post("/aurel")
+async def aurel_router(request: Request):
+    body = await request.json()
+    target = body.get("target")
+    payload = body.get("payload")
+    if target == "edit":
+        # redirige vers la fonction existante /architecte/edit
+        db = payload.get("db")
+        data = payload.get("data")
+        return await edit_entry(db=db, data=data)
+    elif target == "log":
+        # redirige vers /logtest ou création de log spécifique
+        return log_test()
+    else:
+        return {"status": "error", "message": "Unknown target"}
+
 @app.get("/debug/env_status")
 def debug_env_status():
     # Clés "globales"
