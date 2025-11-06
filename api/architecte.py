@@ -332,6 +332,32 @@ def log_test(_: None = Depends(require_token)):
     _create_log_entry("Test manuel via /logtest", "INFO", {"source": "manual"})
     return {"status": "ok", "message": "log envoyé"}
 
+@app.post("/architecte/edit")
+def edit_entry(
+    db: AllowedDB = Query(..., description="Nom court de la base Notion (ex: agent, module, logs)"),
+    data: dict = None,
+    _: None = Depends(require_token)
+):
+    """
+    Crée une nouvelle entrée dans une base Notion donnée.
+    Exemple d'appel :
+    POST /architecte/edit?db=agent
+    Body JSON = {"Nom": {"title": [{"text": {"content": "Mira"}}]}, "Statut": {"select": {"name": "Actif"}}}
+    """
+    try:
+        dbid = _ensure_db(db)
+        if not notion:
+            raise HTTPException(status_code=500, detail="Notion client non configuré")
+        notion.pages.create(
+            parent={"database_id": dbid},
+            properties=data
+        )
+        _create_log_entry(f"Nouvelle entrée ajoutée à {db}", "INFO", {"agent": "Aurel", "target": db})
+        return {"status": "ok", "message": f"Entrée créée dans {db}"}
+    except Exception as e:
+        logger.exception("Erreur création entrée Notion : %s", e)
+        raise HTTPException(status_code=500, detail=str(e))
+
 @app.get("/debug/env_status")
 def debug_env_status():
     # Clés "globales"
