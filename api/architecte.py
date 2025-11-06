@@ -358,21 +358,33 @@ def edit_entry(
         logger.exception("Erreur création entrée Notion : %s", e)
         raise HTTPException(status_code=500, detail=str(e))
 
+from fastapi import Request, Header
+
 @app.post("/aurel")
-async def aurel_router(request: Request):
+async def aurel_router(
+    request: Request,
+    x_aurel_token: str = Header(None)
+):
+    """
+    Route universelle d'orchestration : Aurel peut demander à Pierre d'agir.
+    Les requêtes doivent inclure le header X-Aurel-Token.
+    """
+    if x_aurel_token != os.getenv("AUREL_TOKEN"):
+        raise HTTPException(status_code=403, detail="Token invalide")
+
     body = await request.json()
     target = body.get("target")
     payload = body.get("payload")
+
     if target == "edit":
-        # redirige vers la fonction existante /architecte/edit
         db = payload.get("db")
         data = payload.get("data")
         return await edit_entry(db=db, data=data)
     elif target == "log":
-        # redirige vers /logtest ou création de log spécifique
         return log_test()
     else:
-        return {"status": "error", "message": "Unknown target"}
+        raise HTTPException(status_code=400, detail="Action inconnue")
+
 
 @app.get("/debug/env_status")
 def debug_env_status():
