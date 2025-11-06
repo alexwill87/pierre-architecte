@@ -154,10 +154,6 @@ def _query_database(database_id: str, page_size: int = 10) -> Dict[str, Any]:
     return resp.json()
 
 def _create_log_entry(message: str, level: str = "INFO", extra: Optional[Dict[str, Any]] = None) -> Optional[dict]:
-    """
-    Create a log entry in the Notion LOGS DB if configured.
-    Adapt property names to match your Notion database schema.
-    """
     logs_db = DBS.get("logs")
     if not logs_db:
         logger.warning("LOGS_DB_ID not configured; skipping log write")
@@ -165,27 +161,50 @@ def _create_log_entry(message: str, level: str = "INFO", extra: Optional[Dict[st
     if not (notion or NOTION_TOKEN):
         logger.error("No Notion client/token available; cannot write log")
         return None
-    page = {
-        "parent": {"database_id": logs_db},
-        "properties": {
-            "Message": {"title": [{"text": {"content": message}}]},
-            "Level": {"select": {"name": level}},
-        },
-    }
-    if extra:
-        page["properties"]["Meta"] = {"rich_text": [{"text": {"content": str(extra)}}]}
+
+    # 1) Lire le schéma pour connaître le vrai nom du champ 'title' + props existantes
     try:
         if notion:
-            res = notion.pages.create(**page)
+            meta = notion.databases.retrieve(database_id=logs_db)
         else:
-            # REST fallback
+            url = f"https://api.notion.com/v1/databases/{logs_db}"
+            headers = {"Authorization": f"Bearer {NOTION_TOKEN}", "Notion-Version": NOTION_API_VERSION}
+            resp = requests.get(url, headers=headers, timeout=15)
+            resp.raise_for_status()
+            meta = resp.json()
+        props_meta = meta.get("properties", {})
+        title_prop = _first_title_prop(props_meta) or "Name"  # chez toi: "Description du changement"
+    except Exception as e:
+        logger.exception("Cannot read Logs DB metadata: %s", e)
+        return None
+
+    # 2) Construire les propriétés en ne posant QUE celles qui existent
+    props: Dict[str, Any] = {title_prop: {"title": [{"text": {"content": message}}]}}
+
+    if "Type" in props_meta and level:
+        props["Type"] = {"select": {"name": level}}
+
+    if "Meta" in props_meta and extra:
+        props["Meta"] = {"rich_text": [{"text": {"content": str(extra)}}]}
+
+    # Optionnels si tu les as (on ne casse pas si absents)
+    from datetime import datetime, timezone
+    if "Date du changement" in props_meta:
+        props["Date du changement"] = {"date": {"start": datetime.now(timezone.utc).isoformat()}}
+
+    page_payload = {"parent": {"database_id": logs_db}, "properties": props}
+
+    try:
+        if notion:
+            res = notion.pages.create(**page_payload)
+        else:
             url = "https://api.notion.com/v1/pages"
             headers = {
                 "Authorization": f"Bearer {NOTION_TOKEN}",
                 "Notion-Version": NOTION_API_VERSION,
                 "Content-Type": "application/json",
             }
-            resp = requests.post(url, json=page, headers=headers, timeout=15)
+            resp = requests.post(url, json=page_payload, headers=headers, timeout=15)
             resp.raise_for_status()
             res = resp.json()
         logger.info("Wrote log to Notion id=%s", _mask(res.get("id")))
@@ -193,6 +212,7 @@ def _create_log_entry(message: str, level: str = "INFO", extra: Optional[Dict[st
     except Exception as e:
         logger.exception("Failed to write log to Notion: %s", e)
         return None
+
 
 # --- Types ---
 AllowedDB = Literal["fwk", "agent", "module", "vars", "validations", "outputs", "inputs", "tests", "logs", "kpis"]
