@@ -1,9 +1,9 @@
 {
   "version": 2,
   "builds": [
-    { "src": "api/architecte.py", "use": "@vercel/python" }
+    { "src": "api/pierre.py", "use": "@vercel/python" }
   ],
   "routes": [
-    { "src": "/(.*)", "dest": "api/architecte.py" }
+    { "src": "/(.*)", "dest": "api/pierre.py" }
   ]
 }
