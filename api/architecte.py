@@ -143,15 +143,18 @@ async def create_log(
     if not db_id:
         raise HTTPException(status_code=500, detail="Base Logs non configurée")
 
-    logger.info(f"Création d'un log : {message}")
-    notion.pages.create(
-        parent={"database_id": db_id},
-        properties={
-            "Description du changement": {"title": [{"text": {"content": message}}]},
-            "Date du changement": {"date": {"start": datetime.utcnow().isoformat()}}
-        }
-    )
-    return {"status": "ok", "message": "log envoyé"}
+
+logger.info(f"DB_ID: {db_id}")
+logger.info(f"NOTION_CLIENT: {notion is not None}")
+logger.info(f"Création d'un log : {message}")
+notion.pages.create(
+    parent={"database_id": db_id},
+    properties={
+        "Description du changement": {"title": [{"text": {"content": message}}]},
+        "Date du changement": {"date": {"start": datetime.utcnow().isoformat()}}
+    }
+)
+return {"status": "ok", "message": "log envoyé"}
 
 
 @app.post("/architecte/edit")
