@@ -287,6 +287,12 @@ async def sync_schema(
         "message": f"{len(missing_props)} propriétés manquantes détectées"
     }
 
+# Point d'entrée pour Vercel
+if __name__ == "__vercel__":
+    from fastapi import FastAPI
+    app = app
+
+
 # =====================================================
 # Fin du module Pierre
 # =====================================================
