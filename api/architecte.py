@@ -161,6 +161,39 @@ async def create_log(
     return {"status": "ok", "message": "log envoyé"}
 
 
+@app.post("/logtest")
+async def logtest(request: Request):
+    """
+    Test simple de création d'un log dans Notion (pour diagnostic).
+    """
+    try:
+        verify_token(request)
+        db_id = DB_IDS.get("logs")
+        if not db_id:
+            raise HTTPException(status_code=500, detail="LOGS_DB_ID non trouvé")
+
+        test_message = f"✅ Test LogTest depuis Pierre – {datetime.utcnow().isoformat()}"
+
+        logger.info(f"[LogTest] DB_ID: {db_id}")
+        logger.info(f"[LogTest] NOTION_CLIENT: {notion is not None}")
+        logger.info(f"[LogTest] NOTION_TOKEN (début): {os.getenv('NOTION_TOKEN')[:10]}...")
+        logger.info(f"[LogTest] Message: {test_message}")
+
+        notion.pages.create(
+            parent={"database_id": db_id},
+            properties={
+                "Description du changement": {"title": [{"text": {"content": test_message}}]},
+                "Date du changement": {"date": {"start": datetime.utcnow().isoformat()}}
+            }
+        )
+
+        return {"status": "ok", "message": "LogTest réussi"}
+    
+    except Exception as e:
+        logger.error(f"[LogTest] Erreur: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Erreur LogTest: {e}")
+
+
 @app.post("/architecte/edit")
 async def edit_entry(
     request: Request,
