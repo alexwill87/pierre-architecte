@@ -316,8 +316,20 @@ def compare(
 # --- Debug endpoints (remove or secure in prod) ---
 @app.get("/debug/env_status")
 def debug_env_status():
-    keys = ["NOTION_TOKEN", "FWK_DB_ID", "AGENT_DB_ID", "MODULE_DB_ID", "VARS_DB_ID", "LOGS_DB_ID"]
-    return {"dotenv_path": str(env_path), "loaded": bool(_loaded), "env": _env_status(keys)}
+    # clés “globales”
+    keys = ["NOTION_TOKEN", "API_TOKEN"]
+    # ajoute toutes les bases connues depuis le mapping DBS
+    keys.extend(list(DBS.keys()))  # "fwk","agent","module","vars","validations","outputs","inputs","tests","logs","kpis"
+    # mais _env_status attend des noms d'env, pas les alias; on mappe:
+    env_keys = ["NOTION_TOKEN", "API_TOKEN",
+                "FWK_DB_ID","AGENT_DB_ID","MODULE_DB_ID","VARS_DB_ID",
+                "VALIDATIONS_DB_ID","OUTPUTS_DB_ID","INPUTS_DB_ID","TESTS_DB_ID","LOGS_DB_ID","KPIS_DB_ID"]
+
+    return {
+        "dotenv_path": str(env_path),
+        "loaded": bool(_loaded),
+        "env": _env_status(env_keys)
+    }
 
 @app.get("/debug/routes")
 def debug_routes():
